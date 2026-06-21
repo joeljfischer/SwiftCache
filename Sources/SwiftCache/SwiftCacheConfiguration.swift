@@ -47,6 +47,12 @@ public struct SwiftCacheConfiguration: Sendable {
     /// A Boolean value indicating whether disk entries are reconciled and pruned during initialization.
     public var pruneOnInitialization: Bool
 
+    /// The interval after which newly stored items expire automatically.
+    ///
+    /// A value of `nil` means items do not automatically expire unless a specific expiration date is
+    /// provided when storing the item.
+    public var defaultExpirationInterval: TimeInterval?
+
     /// Creates cache configuration.
     ///
     /// - Parameters:
@@ -57,17 +63,22 @@ public struct SwiftCacheConfiguration: Sendable {
     ///   - diskLimitBytes: The maximum number of bytes to keep on disk. Defaults to 1 GB on iOS,
     ///     macOS, and tvOS, and 32 MB on watchOS.
     ///   - pruneOnInitialization: Whether to reconcile and prune disk entries during initialization.
+    ///   - defaultExpirationInterval: The interval after which newly stored items expire automatically.
+    ///     Defaults to `nil`, which means items do not automatically expire.
     public init(
         directory: URL = Self.defaultDirectory,
         memoryLimitBytes: Int = Self.defaultMemoryLimitBytes,
         diskLimitBytes: Int = Self.defaultDiskLimitBytes,
-        pruneOnInitialization: Bool = true
+        pruneOnInitialization: Bool = true,
+        defaultExpirationInterval: TimeInterval? = nil
     ) {
         self.directory = directory
         self.memoryLimitBytes = memoryLimitBytes
         self.diskLimitBytes = diskLimitBytes
         self.pruneOnInitialization = pruneOnInitialization
+        self.defaultExpirationInterval = defaultExpirationInterval
     }
 
+    /// A cache configuration using the platform defaults.
     public static var defaultConfiguration: Self { .init() }
 }

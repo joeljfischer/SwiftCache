@@ -69,6 +69,14 @@ try await cache.store(
 )
 ```
 
+Or configure an automatic expiration interval for every stored item:
+
+```swift
+let cache = try SwiftCache(
+    configuration: SwiftCacheConfiguration(defaultExpirationInterval: 60 * 60)
+)
+```
+
 ## Configuration
 
 `SwiftCacheConfiguration` controls the cache directory and byte limits:
@@ -77,7 +85,8 @@ try await cache.store(
 let configuration = SwiftCacheConfiguration(
     directory: customDirectory,
     memoryLimitBytes: 50 * 1_024 * 1_024,
-    diskLimitBytes: 500 * 1_024 * 1_024
+    diskLimitBytes: 500 * 1_024 * 1_024,
+    defaultExpirationInterval: 60 * 60
 )
 
 let cache = try SwiftCache(configuration: configuration)
@@ -106,6 +115,10 @@ The cache prunes automatically:
 - after writes
 - when an expired item is read
 - when `prune()` is called
+
+If `defaultExpirationInterval` is set, items stored without an explicit
+`expiresAt` date expire after that interval. Passing `expiresAt` to `store`
+overrides the default interval for that item.
 
 Manual pruning returns a usage snapshot:
 

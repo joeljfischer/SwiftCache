@@ -12,6 +12,7 @@ private struct Profile: Codable, Equatable, Sendable {
     defer { removeTemporaryDirectory(directory) }
 
     let configuration = SwiftCacheConfiguration(directory: directory)
+    #expect(configuration.defaultExpirationInterval == nil)
     #if os(watchOS)
     #expect(configuration.memoryLimitBytes == 4 * 1_024 * 1_024)
     #expect(configuration.diskLimitBytes == 32 * 1_024 * 1_024)
@@ -110,6 +111,51 @@ private struct Profile: Codable, Equatable, Sendable {
     #expect(try await cache.data(forKey: "token") == data)
 }
 
+@Test func appliesDefaultExpirationIntervalToStoredData() async throws {
+    let directory = makeTemporaryDirectory()
+    defer { removeTemporaryDirectory(directory) }
+
+    let cache = try SwiftCache(
+        configuration: SwiftCacheConfiguration(
+            directory: directory,
+            memoryLimitBytes: 32,
+            diskLimitBytes: 64,
+            defaultExpirationInterval: 0
+        )
+    )
+
+    try await cache.store(Data("expired".utf8), forKey: "token")
+
+    #expect(try await cache.data(forKey: "token") == nil)
+
+    let statistics = await cache.currentStatistics
+    #expect(statistics.memoryItemCount == 0)
+    #expect(statistics.diskItemCount == 0)
+}
+
+@Test func explicitExpirationDateOverridesDefaultExpirationInterval() async throws {
+    let directory = makeTemporaryDirectory()
+    defer { removeTemporaryDirectory(directory) }
+
+    let cache = try SwiftCache(
+        configuration: SwiftCacheConfiguration(
+            directory: directory,
+            memoryLimitBytes: 32,
+            diskLimitBytes: 64,
+            defaultExpirationInterval: 0
+        )
+    )
+
+    let data = Data("fresh".utf8)
+    try await cache.store(
+        data,
+        forKey: "token",
+        expiresAt: Date(timeIntervalSinceNow: 3_600)
+    )
+
+    #expect(try await cache.data(forKey: "token") == data)
+}
+
 @Test func prunesExpiredDiskEntriesOnStartup() async throws {
     let directory = makeTemporaryDirectory()
     defer { removeTemporaryDirectory(directory) }
@@ -194,6 +240,41 @@ private struct Profile: Codable, Equatable, Sendable {
 
     let cachedProfile = try await cache.object(forKey: "profile", as: Profile.self)
     #expect(cachedProfile == nil)
+}
+
+@Test func appliesDefaultExpirationIntervalToCodableValues() async throws {
+    let directory = makeTemporaryDirectory()
+    defer { removeTemporaryDirectory(directory) }
+
+    let cache = try SwiftCache(
+        configuration: SwiftCacheConfiguration(
+            directory: directory,
+            memoryLimitBytes: 128,
+            diskLimitBytes: 256,
+            defaultExpirationInterval: 0
+        )
+    )
+
+    try await cache.store(Profile(id: 7, name: "Temporary"), forKey: "profile")
+
+    let cachedProfile = try await cache.object(forKey: "profile", as: Profile.self)
+    #expect(cachedProfile == nil)
+}
+
+@Test func rejectsNegativeDefaultExpirationInterval() {
+    let directory = makeTemporaryDirectory()
+    defer { removeTemporaryDirectory(directory) }
+
+    #expect(throws: SwiftCacheError.invalidConfiguration(
+        "Default expiration interval must be greater than or equal to zero."
+    )) {
+        _ = try SwiftCache(
+            configuration: SwiftCacheConfiguration(
+                directory: directory,
+                defaultExpirationInterval: -1
+            )
+        )
+    }
 }
 
 @Test func evictsLeastRecentlyUsedMemoryEntryWhenMemoryLimitIsExceeded() async throws {

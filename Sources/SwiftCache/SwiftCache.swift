@@ -45,7 +45,8 @@ public actor SwiftCache {
     /// - Parameters:
     ///   - data: The data to cache.
     ///   - key: The cache key used to retrieve the data later.
-    ///   - expiresAt: The optional date after which the cached item should be treated as missing.
+    ///   - expiresAt: The optional date after which the cached item should be treated as missing. When
+    ///     this is `nil`, the cache uses ``SwiftCacheConfiguration/defaultExpirationInterval``.
     /// - Throws: ``SwiftCacheError/itemExceedsDiskLimit(itemSizeBytes:diskLimitBytes:)`` when the item is
     ///   larger than the disk limit, or a filesystem error while writing the item.
     public func store(_ data: Data, forKey key: String, expiresAt: Date? = nil) throws {
@@ -61,7 +62,9 @@ public actor SwiftCache {
         let fileURL = cacheFileURL(filename: filename)
         let previousDiskSize = diskEntries[key]?.sizeBytes ?? 0
 
-        if isExpired(expiresAt) {
+        let effectiveExpiresAt = expirationDate(for: expiresAt)
+
+        if isExpired(effectiveExpiresAt) {
             try removeValue(forKey: key)
             return
         }
@@ -73,7 +76,7 @@ public actor SwiftCache {
             filename: filename,
             sizeBytes: data.count,
             lastAccess: access,
-            expiresAt: expiresAt
+            expiresAt: effectiveExpiresAt
         )
         diskUsageBytes += data.count - previousDiskSize
 
@@ -83,7 +86,7 @@ public actor SwiftCache {
                 data: data,
                 sizeBytes: data.count,
                 lastAccess: access,
-                expiresAt: expiresAt
+                expiresAt: effectiveExpiresAt
             )
             memoryUsageBytes += data.count - previousMemorySize
         } else {
@@ -102,7 +105,8 @@ public actor SwiftCache {
     /// - Parameters:
     ///   - value: The value to encode and cache.
     ///   - key: The cache key used to retrieve the value later.
-    ///   - expiresAt: The optional date after which the cached value should be treated as missing.
+    ///   - expiresAt: The optional date after which the cached value should be treated as missing. When
+    ///     this is `nil`, the cache uses ``SwiftCacheConfiguration/defaultExpirationInterval``.
     /// - Throws: An encoding error, ``SwiftCacheError``, or a filesystem error while storing the value.
     public func store<Value: Encodable & Sendable>(
         _ value: Value,
@@ -322,6 +326,14 @@ private extension SwiftCache {
 
         guard configuration.diskLimitBytes >= 0 else {
             throw SwiftCacheError.invalidConfiguration("Disk limit must be greater than or equal to zero.")
+        }
+
+        if let defaultExpirationInterval = configuration.defaultExpirationInterval {
+            guard defaultExpirationInterval >= 0 else {
+                throw SwiftCacheError.invalidConfiguration(
+                    "Default expiration interval must be greater than or equal to zero."
+                )
+            }
         }
     }
 
@@ -637,6 +649,18 @@ private extension SwiftCache {
     func nextAccess() -> UInt64 {
         accessCounter += 1
         return accessCounter
+    }
+
+    func expirationDate(for explicitExpirationDate: Date?) -> Date? {
+        if let explicitExpirationDate {
+            return explicitExpirationDate
+        }
+
+        guard let defaultExpirationInterval = configuration.defaultExpirationInterval else {
+            return nil
+        }
+
+        return Date().addingTimeInterval(defaultExpirationInterval)
     }
 
     func isExpired(_ expiresAt: Date?) -> Bool {
